@@ -1,32 +1,40 @@
 import java.util.*;
 
 public class HostelFeeCalculator {
-    private final BookingRepository repo;
-    private final RoomPricing roomPrice;
-    private final AddOnPricing addOnPrice;
+    private final FakeBookingRepo repo;
+    private final List<AddOnRule> addOnRules;
 
-    public HostelFeeCalculator(BookingRepository repo, RoomPricing roomPrice, AddOnPricing addOnPrice){ 
+    public HostelFeeCalculator(FakeBookingRepo repo, List<AddOnRule> rules) {
         this.repo = repo;
-        this.roomPrice= roomPrice;
-        this.addOnPrice = addOnPrice;
+        this.addOnRules = rules;
     }
 
-    // OCP violation: switch + add-on branching + printing + persistence.
-    public void process(BookingRequest req) {
-        Money monthly = calculateMonthly(req);
+    public void process(BookingRequest req, RoomType room) {
+        Money monthly = calculateMonthly(req, room);
         Money deposit = new Money(5000.00);
+        printReceipt(room.getName(), req.addOns, monthly, deposit);
 
-        ReceiptPrinter.print(req, monthly, deposit);
-
-        String bookingId = "H-" + (7000 + new Random(1).nextInt(1000)); // deterministic-ish
+        String bookingId = "H-" + (7000 + new Random(1).nextInt(1000));
         repo.save(bookingId, req, monthly, deposit);
     }
 
-    private Money calculateMonthly(BookingRequest req) {
-        Money total = roomPrice.roomPrice(req.roomType);
-        for(AddOn a : req.addOns){
-            total.plus(addOnPrice.addOnPrice(a));
+    private Money calculateMonthly(BookingRequest req, RoomType room) {
+        double total = room.getBaseRate();
+        
+        for (AddOn a : req.addOns) {
+            for (AddOnRule rule : addOnRules) {
+                if (rule.appliesTo(a)) {
+                    total += rule.getPrice();
+                }
+            }
         }
-        return total;
+        return new Money(total);
+    }
+
+    private void printReceipt(String roomName, List<AddOn> addOns, Money monthly, Money deposit) {
+        System.out.println("Room: " + roomName + " | AddOns: " + addOns);
+        System.out.println("Monthly: " + monthly);
+        System.out.println("Deposit: " + deposit);
+        System.out.println("TOTAL DUE NOW: " + monthly.plus(deposit));
     }
 }
